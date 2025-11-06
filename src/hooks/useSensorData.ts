@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 
-interface SensorData {
+export interface SensorData {
   timestamp: string;
   ph: number;
   temperature: number;
@@ -9,7 +9,7 @@ interface SensorData {
   pressure3: number;
 }
 
-interface Alert {
+export interface Alert {
   id: string;
   sensor: string;
   message: string;
@@ -17,48 +17,32 @@ interface Alert {
   timestamp: string;
 }
 
+function extractNumber(value: unknown): number {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const match = value.match(/-?\d+(\.\d+)?/);
+    return match ? Number(match[0]) : NaN;
+  }
+  return NaN;
+}
+
+const MAX_ENTRIES = 500;
+
 export const useSensorData = () => {
   const [data, setData] = useState<SensorData[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [currentValues, setCurrentValues] = useState({
-    ph: 7.2,
-    temperature: 35.5,
-    pressure1: 15.2,
-    pressure2: 18.7,
-    pressure3: 12.3
+  const [currentValues, setCurrentValues] = useState<SensorData>({
+    timestamp: '',
+    ph: NaN,
+    temperature: NaN,
+    pressure1: NaN,
+    pressure2: NaN,
+    pressure3: NaN,
   });
 
-  const previousValues = useRef(currentValues);
-
-  const generateNewData = (): SensorData => {
-    const now = new Date();
-    const timeString = now.toLocaleTimeString('en-US', { 
-      hour12: false, 
-      hour: '2-digit', 
-      minute: '2-digit',
-      second: '2-digit'
-    });
-
-    // Generate realistic biogas sensor values with some variation
-    const newValues = {
-      ph: Math.max(6.0, Math.min(8.5, currentValues.ph + (Math.random() - 0.5) * 0.3)),
-      temperature: Math.max(30, Math.min(45, currentValues.temperature + (Math.random() - 0.5) * 2)),
-      pressure1: Math.max(10, Math.min(25, currentValues.pressure1 + (Math.random() - 0.5) * 1.5)),
-      pressure2: Math.max(12, Math.min(30, currentValues.pressure2 + (Math.random() - 0.5) * 2)),
-      pressure3: Math.max(8, Math.min(20, currentValues.pressure3 + (Math.random() - 0.5) * 1.2))
-    };
-
-    setCurrentValues(newValues);
-
-    return {
-      timestamp: timeString,
-      ph: Number(newValues.ph.toFixed(1)),
-      temperature: Number(newValues.temperature.toFixed(1)),
-      pressure1: Number(newValues.pressure1.toFixed(1)),
-      pressure2: Number(newValues.pressure2.toFixed(1)),
-      pressure3: Number(newValues.pressure3.toFixed(1))
-    };
-  };
+  const previousValues = useRef<SensorData>(currentValues);
+  // Correct Type for intervalRef in browsers/Node is number or null for window.setInterval
+  const intervalRef = useRef<number | null>(null);
 
   const checkForAlerts = (newData: SensorData) => {
     const sensors = [
@@ -66,79 +50,90 @@ export const useSensorData = () => {
       { key: 'temperature', name: 'Temperature', threshold: 3, normal: [32, 40] },
       { key: 'pressure1', name: 'Pressure 1', threshold: 2, normal: [12, 20] },
       { key: 'pressure2', name: 'Pressure 2', threshold: 2.5, normal: [15, 25] },
-      { key: 'pressure3', name: 'Pressure 3', threshold: 1.5, normal: [10, 18] }
+      { key: 'pressure3', name: 'Pressure 3', threshold: 1.5, normal: [10, 18] },
     ];
 
     const newAlerts: Alert[] = [];
 
-    sensors.forEach(sensor => {
-      const currentValue = newData[sensor.key as keyof SensorData] as number;
-      const previousValue = previousValues.current[sensor.key as keyof typeof previousValues.current];
+    sensors.forEach(({ key, name, threshold, normal }) => {
+      const currentValue = newData[key as keyof SensorData];
+      const previousValue = previousValues.current[key as keyof SensorData];
+
+      if (
+        typeof currentValue !== 'number' ||
+        typeof previousValue !== 'number' ||
+        isNaN(currentValue) ||
+        isNaN(previousValue)
+      ) {
+        return;
+      }
+
       const change = Math.abs(currentValue - previousValue);
-      
-      if (change > sensor.threshold) {
+
+      if (change > threshold) {
         newAlerts.push({
-          id: `${sensor.key}-${Date.now()}`,
-          sensor: sensor.name,
+          id: `${key}-${Date.now()}`,
+          sensor: name,
           message: `Sudden change detected: ${change.toFixed(1)} unit change`,
           severity: 'warning',
-          timestamp: new Date().toLocaleTimeString()
+          timestamp: new Date().toLocaleTimeString(),
         });
-      } else if (currentValue < sensor.normal[0] || currentValue > sensor.normal[1]) {
+      } else if (normal.length >= 2 && (currentValue < normal[0] || currentValue > normal[1])) {
         newAlerts.push({
-          id: `${sensor.key}-range-${Date.now()}`,
-          sensor: sensor.name,
+          id: `${key}-range-${Date.now()}`,
+          sensor: name,
           message: `Value outside normal range: ${currentValue}`,
           severity: 'warning',
-          timestamp: new Date().toLocaleTimeString()
+          timestamp: new Date().toLocaleTimeString(),
         });
       }
     });
 
     if (newAlerts.length > 0) {
-      setAlerts(prev => [...newAlerts, ...prev.slice(0, 4)]); // Keep max 5 alerts
+      setAlerts((prev) => [...newAlerts, ...prev.slice(0, 4)]);
     }
 
-    previousValues.current = { ...currentValues };
+    previousValues.current = { ...newData };
   };
 
   useEffect(() => {
-    // Initialize with some data points
-    const initialData: SensorData[] = [];
-    for (let i = 19; i >= 0; i--) {
-      const timestamp = new Date(Date.now() - i * 3000);
-      const timeString = timestamp.toLocaleTimeString('en-US', { 
-        hour12: false, 
-        hour: '2-digit', 
-        minute: '2-digit',
-        second: '2-digit'
-      });
-      
-      initialData.push({
-        timestamp: timeString,
-        ph: Number((7 + Math.random() * 0.5).toFixed(1)),
-        temperature: Number((35 + Math.random() * 3).toFixed(1)),
-        pressure1: Number((15 + Math.random() * 2).toFixed(1)),
-        pressure2: Number((18 + Math.random() * 2.5).toFixed(1)),
-        pressure3: Number((12 + Math.random() * 1.5).toFixed(1))
-      });
-    }
-    setData(initialData);
+    const fetchSensorData = async () => {
+      try {
+        const response = await fetch('http://172.16.125.23:3000/sensorData');
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
-    // Set up interval for live updates
-    const interval = setInterval(() => {
-      const newData = generateNewData();
-      
-      setData(prev => {
-        const updated = [...prev, newData];
-        // Keep only last 20 data points
-        return updated.slice(-20);
-      });
-      
-      checkForAlerts(newData);
-    }, 3000);
+        const fetchedData: SensorData[] = await response.json();
 
-    return () => clearInterval(interval);
+        if (fetchedData.length === 0) return;
+
+        const latest = fetchedData[0]; // newest data
+
+        const newData: SensorData = {
+          timestamp: new Date(latest.timestamp).toLocaleTimeString(),
+          ph: extractNumber(latest.ph),
+          temperature: extractNumber(latest.temperature),
+          pressure1: extractNumber(latest.pressure1),
+          pressure2: extractNumber(latest.pressure2),
+          pressure3: extractNumber(latest.pressure3),
+        };
+
+        setCurrentValues(newData);
+        setData((prev) => [...prev.slice(-19), newData]);
+        checkForAlerts(newData);
+      } catch (error) {
+        console.error('Failed to fetch sensor data:', error);
+      }
+    };
+
+    fetchSensorData();
+
+    intervalRef.current = window.setInterval(fetchSensorData, 5000);
+
+    return () => {
+      if (intervalRef.current !== null) {
+        clearInterval(intervalRef.current);
+      }
+    };
   }, []);
 
   return { data, alerts, currentValues };

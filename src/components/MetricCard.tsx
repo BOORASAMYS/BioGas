@@ -50,4 +50,4 @@ const MetricCard: React.FC<MetricCardProps> = ({ title, value, unit, color, icon
   );
 };
 
-export default MetricCard;
+export default MetricCard; 

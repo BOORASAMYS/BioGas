@@ -139,7 +139,7 @@ function App() {
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
-                    Sensor Dashboard
+                    Separate Graphs
                   </button>
                 </div>
               </div>
