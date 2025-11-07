@@ -99,7 +99,7 @@ export const useSensorData = () => {
   useEffect(() => {
     const fetchSensorData = async () => {
       try {
-        const response = await fetch('http://172.16.125.23:3000/sensorData');
+        const response = await fetch('https://biogas-backend-zk70.onrender.com/sensorData');
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
         const fetchedData: SensorData[] = await response.json();
