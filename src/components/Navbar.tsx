@@ -8,7 +8,7 @@ interface NavbarProps {
 const Navbar: React.FC<NavbarProps> = ({ currentTime }) => {
   const handleExport = async () => {
     try {
-      const response = await fetch("http://172.16.125.23:3000/export-and-delete");
+      const response = await fetch("https://biogas-backend-zk70.onrender.com/export-and-delete");
 
       if (!response.ok) {
         throw new Error(`Server error: ${response.status}`);
